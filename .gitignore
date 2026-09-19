@@ -1,0 +1,12 @@
+# Maven build output
+**/target/
+
+# IntelliJ
+.idea/
+*.iml
+
+# Environment variables
+.env
+
+# Logs
+*.log
