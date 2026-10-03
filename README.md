@@ -109,3 +109,21 @@ missing products, stock increment and boundary conditions.
 
 A two-request parallel reservation smoke test returned one 200 and one 409.
 Final stock was total 5, reserved 4, available 1.
+
+
+### Day 4 — Kafka Infrastructure and CLI Testing
+
+- Started Apache Kafka 4.1.2 locally using Docker Compose in KRaft mode.
+- Configured localhost:9092 for host clients and kafka:19092 for Docker clients.
+- Added a named Docker volume for Kafka data.
+- Created order-placed and inventory-reserved topics:
+    - 3 partitions per topic
+    - Replication factor: 1
+- Published a sample order event using the console producer.
+- Read the event using the inventory-demo consumer group.
+- Verified independent consumption using the notification-demo consumer group.
+
+Kafka testing currently uses CLI tools. Spring Boot producer and consumer
+integration will be implemented in the following days.
+
+This is a single-broker local setup without broker-level redundancy.
