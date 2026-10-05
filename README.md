@@ -127,3 +127,23 @@ Kafka testing currently uses CLI tools. Spring Boot producer and consumer
 integration will be implemented in the following days.
 
 This is a single-broker local setup without broker-level redundancy.
+
+### Day 5 — Kafka Producer in Order Service
+
+- Added Spring Boot Kafka integration.
+- Created OrderPlacedEvent and OrderEventPublisher.
+- Published order-placed events with order ID as the record key.
+- Configured JSON serialization and acks=all.
+- Added bounded acknowledgement waiting and metadata/buffer blocking timeout.
+
+Verified:
+- POST /api/orders returned 201 with PENDING status.
+- CLI consumer received matching order ID, key and event data.
+- GET /api/orders/3 returned the saved order.
+- Kafka-down request returned 500; SQL verification found no test order.
+- Service remained UP and publishing recovered after Kafka restart.
+
+Known limitation:
+MySQL commit and Kafka publishing are not atomic. A timeout can leave
+delivery uncertain. Transactional outbox is planned for reliable delivery.
+Inventory consumer integration is pending.

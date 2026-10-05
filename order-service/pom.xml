@@ -62,8 +62,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-	</dependencies>
 
+        <!-- Kafka integration aur Spring Boot auto-configuration ke liye -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+
+	</dependencies>
 	<build>
 		<plugins>
 			<plugin>
