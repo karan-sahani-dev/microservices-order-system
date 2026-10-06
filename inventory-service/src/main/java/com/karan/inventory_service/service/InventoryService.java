@@ -34,9 +34,8 @@ public class InventoryService {
     }
     @Transactional
     public Inventory reserveStock(Long productId, int quantity) {
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Reservation quantity must be greater than zero");
-        }
+        validateProductId(productId);
+        validateQuantity(quantity);
         int updatedRows = inventoryRepository.reserveStock(productId, quantity);
         Inventory inventory = inventoryRepository.findByProductId(productId)
                 .orElseThrow(

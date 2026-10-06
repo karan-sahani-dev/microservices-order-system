@@ -62,6 +62,12 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- Kafka consumer, producer aur Boot auto-configuration ke liye -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
 	</dependencies>
 
 	<build>

@@ -147,3 +147,29 @@ Known limitation:
 MySQL commit and Kafka publishing are not atomic. A timeout can leave
 delivery uncertain. Transactional outbox is planned for reliable delivery.
 Inventory consumer integration is pending.
+
+### Day 6 — Kafka Consumer and Inventory Reservation
+
+- Consumed order-placed events using @KafkaListener.
+- Mapped JSON payloads to local event objects and validated inputs.
+- Added inventory_reservations with order_id as the primary key.
+- Reserved stock and saved the reservation in one MySQL transaction.
+- Added duplicate detection and conflicting-payload checks.
+- Published inventory-reserved events after reservation commit.
+- Configured record acknowledgements and a 2-second retry backoff.
+
+Verified:
+- Retained order events were consumed and stock was reserved.
+- Inventory downtime did not stop order-service.
+- Order 6 was processed after inventory-service restarted.
+- Order 7 requested 86 units with only 85 available:
+  stock stayed unchanged and no reservation row persisted.
+- After adding 1 unit, retry succeeded and published the result.
+- Final product 101 stock: total 109, reserved 109, available 0.
+
+Limitations:
+- Unlimited retries are a local learning policy; permanent failures
+  can delay further consumption. Rejection events/DLT are pending.
+- Reservation results can be published more than once.
+- MySQL, Kafka publishing and offset commits are not atomic.
+- Order confirmation consumer and transactional outbox are pending.
