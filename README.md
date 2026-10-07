@@ -173,3 +173,13 @@ Limitations:
 - Reservation results can be published more than once.
 - MySQL, Kafka publishing and offset commits are not atomic.
 - Order confirmation consumer and transactional outbox are pending.
+
+### Day 7 — Week 1 Review
+
+- Verified order creation → OrderPlaced → stock reservation → InventoryReserved.
+- Created order 8 for product 303 with quantity 2.
+- Replayed the same OrderPlaced event using Kafka key 8.
+- Verified stock remained: total 10, reserved 2, available 8.
+- Verified exactly one reservation row exists for order 8.
+- InventoryReserved was published again on replay; downstream consumers must handle duplicates.
+- Orders remain PENDING; order confirmation is not implemented yet.
