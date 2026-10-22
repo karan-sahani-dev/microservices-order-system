@@ -183,3 +183,20 @@ Limitations:
 - Verified exactly one reservation row exists for order 8.
 - InventoryReserved was published again on replay; downstream consumers must handle duplicates.
 - Orders remain PENDING; order confirmation is not implemented yet.
+
+### Day 8 — Notification Service
+
+- Added Kafka consumers for order-placed and inventory-reserved.
+- Used an independent notification-service consumer group.
+- Added JSON event mapping and explicit Bean Validation.
+- Simulated notifications through console logs.
+- Verified both notifications for order 9.
+- Created order 10 while notification-service was stopped.
+- Verified both notifications for order 10 after restart.
+
+Known limitations:
+- Console simulation only; no real email/SMS delivery.
+- Duplicate events or retries can repeat notifications.
+- No ordering guarantee across the two topics.
+- Unlimited retries can block progress on invalid events; bounded retries and DLT are pending.
+- Order confirmation is not implemented; orders remain PENDING.
