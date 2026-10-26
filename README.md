@@ -200,3 +200,24 @@ Known limitations:
 - No ordering guarantee across the two topics.
 - Unlimited retries can block progress on invalid events; bounded retries and DLT are pending.
 - Order confirmation is not implemented; orders remain PENDING.
+
+### Day 9 — API Gateway
+
+- Added api-gateway using Spring Cloud Gateway Server WebFlux on port 8080.
+- Routed /api/orders and /api/orders/** to order-service on port 8081.
+- Routed /api/inventory and /api/inventory/** to inventory-service on port 8082.
+- Preserved request paths; backend services retain their business logic.
+- Made destination URLs configurable through ORDER_SERVICE_URL and INVENTORY_SERVICE_URL.
+
+Manual verification:
+- Inventory GET through gateway returned 200.
+- Order GET through gateway returned 200.
+- Order POST through gateway returned 201 and created order 11.
+- Product 303 stock changed from reserved 5 / available 5 to reserved 6 / available 4.
+- With inventory-service stopped, inventory GET returned 500 while order GET still returned 200.
+- Inventory route recovered after inventory-service restarted without restarting the gateway.
+
+Known limitations:
+- No gateway authentication, circuit breaker, or custom backend-error mapping yet.
+- Backend ports remain directly accessible in the local setup.
+- A single gateway instance is a single point of failure.
