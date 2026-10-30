@@ -220,4 +220,23 @@ Manual verification:
 Known limitations:
 - No gateway authentication, circuit breaker, or custom backend-error mapping yet.
 - Backend ports remain directly accessible in the local setup.
-- A single gateway instance is a single point of failure.
+
+### Day 10 — Circuit Breaker
+
+- Added Resilience4j circuit breaker to the gateway inventory route.
+- Configured a 10-call sliding window, minimum 5 calls, and 50% failure threshold.
+- Configured a 10-second OPEN wait, 2 HALF_OPEN trial calls, and a 3-second timeout.
+- Added a fallback returning HTTP 503 with a clear inventory-unavailable message.
+- Added circuit-breaker state-transition logging.
+
+Manual testing:
+- Healthy inventory request returned 200.
+- Requests while inventory-service was stopped returned the 503 fallback.
+- Observed CLOSED_TO_OPEN.
+- Restarted inventory-service without restarting the gateway.
+- Observed OPEN_TO_HALF_OPEN and HALF_OPEN_TO_CLOSED during recovery.
+
+Notes:
+- A 503 fallback does not indicate zero stock.
+- Fallback responses alone do not prove the circuit is OPEN.
+- Circuit breaker protects gateway HTTP calls; Kafka processing is separate.
