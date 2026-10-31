@@ -240,3 +240,45 @@ Notes:
 - A 503 fallback does not indicate zero stock.
 - Fallback responses alone do not prove the circuit is OPEN.
 - Circuit breaker protects gateway HTTP calls; Kafka processing is separate.
+
+## Day 11 — Synchronous Inventory Lookup
+
+Added a WebClient-based inventory lookup in order-service.
+
+### Endpoint
+
+GET /api/orders/inventory/{productId}
+
+- Direct access: http://localhost:8081/api/orders/inventory/303
+- Gateway access: http://localhost:8080/api/orders/inventory/303
+
+The gateway routes the request to order-service, which calls
+inventory-service directly over HTTP.
+
+### Configuration
+
+- Inventory URL: INVENTORY_SERVICE_URL, default http://localhost:8082
+- Request timeout: app.inventory.request-timeout-seconds=3
+
+### Manual Tests
+
+| Scenario | Result |
+|----------|--------|
+| Existing product | 200 OK |
+| Missing product | 404 Not Found |
+| Invalid product ID (0) | 400 Bad Request |
+| Inventory-service stopped | 503 Service Unavailable |
+| Recovery after inventory restart | 200 OK |
+| Lookup through API Gateway | 200 OK |
+| Delayed response using debugger breakpoint | 503 after approximately 3 seconds |
+| Recovery after removing breakpoint and resuming | 200 OK |
+
+### Design Notes
+
+- Lookup is read-only and does not reserve stock.
+- Available stock is a snapshot, not a reservation guarantee.
+- Existing Kafka-based order creation remains unchanged.
+- WebClient uses block() in the MVC application, so the calling
+  request thread waits for the result within the configured timeout.
+- The gateway inventory-route circuit breaker does not protect
+  order-service's direct WebClient call.

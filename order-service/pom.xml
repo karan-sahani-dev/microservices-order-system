@@ -69,6 +69,12 @@
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
 
+        <!-- Inventory-service ko HTTP requests bhejne ke liye WebClient support -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webclient</artifactId>
+        </dependency>
+
 	</dependencies>
 	<build>
 		<plugins>
