@@ -282,3 +282,51 @@ inventory-service directly over HTTP.
   request thread waits for the result within the configured timeout.
 - The gateway inventory-route circuit breaker does not protect
   order-service's direct WebClient call.
+
+## Day 12 — Redis Inventory Caching
+
+Added cache-aside caching to inventory-service using Spring Cache
+and Redis.
+
+### Implementation
+
+- Cache name: inventory-stock
+- Cache key example: inventory-stock::303
+- Cached value: InventoryResponse DTO serialized as JSON
+- TTL: 5 minutes
+- Cache hit: returns the cached DTO without an inventory database lookup
+- Cache miss: reads MySQL and populates Redis
+- Successful stock additions and reservations evict the product's cache entry
+- Transaction-aware cache eviction is deferred until successful commit
+- Failed reservations preserve the existing cache entry
+
+### Manual Verification
+
+| Scenario | Observed result |
+|----------|-----------------|
+| Redis connectivity | PONG |
+| Cache population | Stock JSON present in Redis |
+| Cache hit | 200 OK without a new inventory SELECT |
+| Stock addition | Cache entry removed; next GET loaded updated stock |
+| REST reservation | Cache entry removed; updated stock returned |
+| Insufficient stock | 409 Conflict; cached stock unchanged |
+| Kafka reservation | Cache key changed from present to absent; fresh stock returned |
+| TTL expiry | TTL counted down, then returned -2 |
+| Reload after expiry | Fresh JSON cached with a new TTL |
+
+### Configuration
+
+- REDIS_HOST: defaults to localhost
+- REDIS_PORT: defaults to 6379
+- spring.cache.redis.time-to-live=5m
+- Redis connection and command timeouts: 2 seconds
+
+### Limitations
+
+MySQL remains the source of truth, and reservations use the atomic
+database update. Cached availability is a snapshot and does not
+guarantee reservation success.
+
+Transaction-aware caching does not make MySQL and Redis atomic.
+Concurrent reads and cache failures can still cause stale data.
+Automatic fallback to MySQL when Redis is unavailable is not implemented.

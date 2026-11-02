@@ -26,9 +26,17 @@ services:
       # Topics manually create karenge aur data volume mein rakhenge
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_LOG_DIRS: /var/lib/kafka/data
-
     volumes:
       - kafka-data:/var/lib/kafka/data
+  redis:
+      image: redis:7.4
+      ports:
+        - "127.0.0.1:6379:6379"
+      healthcheck:
+        test: [ "CMD", "redis-cli", "ping" ]
+        interval: 10s
+        timeout: 3s
+        retries: 5
 
 volumes:
   kafka-data:

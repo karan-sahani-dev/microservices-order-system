@@ -4,13 +4,13 @@ import com.karan.inventory_service.dto.AddStockRequest;
 import com.karan.inventory_service.dto.InventoryResponse;
 import com.karan.inventory_service.dto.ReserveStockRequest;
 import com.karan.inventory_service.entity.Inventory;
+import com.karan.inventory_service.service.InventoryQueryService;
 import com.karan.inventory_service.service.InventoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
 public class InventoryController {
+
     private final InventoryService inventoryService;
+    private final InventoryQueryService inventoryQueryService;
 
     @PostMapping
     public InventoryResponse addStock(@Valid @RequestBody AddStockRequest request) {
@@ -27,21 +29,27 @@ public class InventoryController {
                 request.getProductId(),
                 request.getQuantity()
         );
+
         return InventoryResponse.from(inventory);
     }
 
     @GetMapping("/{productId}")
-    public InventoryResponse getInventory(@PathVariable("productId") Long productId) {
-        Inventory inventory = inventoryService.getInventory(productId);
-        return InventoryResponse.from(inventory);
+    public InventoryResponse getInventory(
+            @PathVariable("productId") Long productId) {
+
+        // Stock reads caching proxy se guzarti hain.
+        return inventoryQueryService.getInventory(productId);
     }
 
     @PostMapping("/reserve")
-    public InventoryResponse reserveStock(@Valid @RequestBody ReserveStockRequest request) {
+    public InventoryResponse reserveStock(
+            @Valid @RequestBody ReserveStockRequest request) {
+
         Inventory inventory = inventoryService.reserveStock(
                 request.getProductId(),
                 request.getQuantity()
         );
+
         return InventoryResponse.from(inventory);
     }
 }
