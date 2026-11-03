@@ -1,6 +1,7 @@
 package com.karan.inventory_service.service;
 
 import com.karan.inventory_service.entity.InventoryReservation;
+import com.karan.inventory_service.entity.ReservationStatus;
 import com.karan.inventory_service.event.OrderPlacedEvent;
 import com.karan.inventory_service.repository.InventoryReservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +26,6 @@ public class InventoryReservationService {
         if (existing.isPresent()) {
             InventoryReservation reservation = existing.get();
 
-            // Same order ID ke saath different data accept nahi karenge
             boolean sameDetails =
                     reservation.getProductId().equals(event.getProductId())
                             && reservation.getQuantity() == event.getQuantity()
@@ -34,35 +34,60 @@ public class InventoryReservationService {
             if (!sameDetails) {
                 throw new IllegalArgumentException(
                         "Conflicting reservation details for order: "
-                                + event.getOrderId());
+                                + event.getOrderId()
+                );
             }
 
-            // Replay par stock dobara reserve nahi hoga
+            if (reservation.getStatus() == ReservationStatus.PENDING) {
+                throw new IllegalStateException(
+                        "Reservation outcome is not final for order: "
+                                + event.getOrderId()
+                );
+            }
+
+            // Replay par pehle se saved outcome return hoga
             return reservation;
         }
 
-        // Constructor IDs aur quantity ki basic validation karega
-        InventoryReservation reservation = new InventoryReservation(
+        InventoryReservation newReservation = new InventoryReservation(
                 event.getOrderId(),
                 event.getProductId(),
                 event.getQuantity(),
                 event.getUserId()
         );
 
-        // Primary key concurrent duplicate inserts ko reject karegi
         reservationRepository.insertReservation(
-                reservation.getOrderId(),
-                reservation.getProductId(),
-                reservation.getQuantity(),
-                reservation.getUserId()
+                newReservation.getOrderId(),
+                newReservation.getProductId(),
+                newReservation.getQuantity(),
+                newReservation.getUserId()
         );
 
-        // Stock update isi MySQL transaction ka part rahega
-        inventoryService.reserveStock(
-                reservation.getProductId(),
-                reservation.getQuantity()
+        StockReservationResult result = inventoryService.tryReserveStock(
+                newReservation.getProductId(),
+                newReservation.getQuantity()
         );
 
+        // Repository updates persistence context clear karte hain,
+        // isliye outcome update karne se pehle entity reload karenge
+        InventoryReservation reservation =
+                reservationRepository.findById(event.getOrderId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Reservation disappeared for order: "
+                                        + event.getOrderId()
+                        ));
+
+        switch (result) {
+            case RESERVED -> reservation.markReserved();
+
+            case PRODUCT_NOT_FOUND ->
+                    reservation.markRejected("PRODUCT_NOT_FOUND");
+
+            case INSUFFICIENT_STOCK ->
+                    reservation.markRejected("INSUFFICIENT_STOCK");
+        }
+
+        // Managed entity ke changes transaction commit par save honge
         return reservation;
     }
 }

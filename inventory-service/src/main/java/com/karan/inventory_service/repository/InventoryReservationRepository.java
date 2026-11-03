@@ -9,14 +9,16 @@ import org.springframework.data.repository.query.Param;
 public interface InventoryReservationRepository
         extends JpaRepository<InventoryReservation, Long> {
 
-    // Same order ID dobara insert hua toh primary key constraint reject karegi
+    // Har nayi reservation PENDING se start hogi
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(
             value = """
                     INSERT INTO inventory_reservations
-                        (order_id, product_id, quantity, user_id)
+                        (order_id, product_id, quantity, user_id,
+                         status, rejection_reason)
                     VALUES
-                        (:orderId, :productId, :quantity, :userId)
+                        (:orderId, :productId, :quantity, :userId,
+                         'PENDING', NULL)
                     """,
             nativeQuery = true
     )

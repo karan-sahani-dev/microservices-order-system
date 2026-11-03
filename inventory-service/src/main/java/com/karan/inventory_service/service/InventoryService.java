@@ -53,6 +53,33 @@ public class InventoryService {
         return inventory;
     }
 
+    @Transactional
+    @CacheEvict(
+            cacheNames = "inventory-stock",
+            key = "#p0",
+            condition = "#result.name() == 'RESERVED'"
+    )
+    public StockReservationResult tryReserveStock(
+            Long productId,
+            int quantity) {
+
+        validateProductId(productId);
+        validateQuantity(quantity);
+
+        int updatedRows =
+                inventoryRepository.reserveStock(productId, quantity);
+
+        if (updatedRows > 0) {
+            return StockReservationResult.RESERVED;
+        }
+
+        if (inventoryRepository.findByProductId(productId).isEmpty()) {
+            return StockReservationResult.PRODUCT_NOT_FOUND;
+        }
+
+        return StockReservationResult.INSUFFICIENT_STOCK;
+    }
+
     private void validateProductId(Long productId) {
         if (productId == null || productId <= 0) {
             throw new IllegalArgumentException("Product ID must be positive");

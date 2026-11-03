@@ -1,6 +1,7 @@
 package com.karan.inventory_service.messaging;
 
 import com.karan.inventory_service.entity.InventoryReservation;
+import com.karan.inventory_service.event.InventoryRejectedEvent;
 import com.karan.inventory_service.event.InventoryReservedEvent;
 import com.karan.inventory_service.event.OrderPlacedEvent;
 import com.karan.inventory_service.service.InventoryReservationService;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -36,16 +38,15 @@ public class OrderPlacedListener {
     )
     public void consume(String message) throws Exception {
 
-        // Kafka se mili JSON String ko local event object banayenge
         OrderPlacedEvent event =
                 jsonMapper.readValue(message, OrderPlacedEvent.class);
 
         if (event == null) {
             throw new IllegalArgumentException(
-                    "OrderPlaced event must not be null");
+                    "OrderPlaced event must not be null"
+            );
         }
 
-        // Kafka payload ke validation rules explicitly check karenge
         Set<ConstraintViolation<OrderPlacedEvent>> violations =
                 validator.validate(event);
 
@@ -53,29 +54,52 @@ public class OrderPlacedListener {
             throw new ConstraintViolationException(violations);
         }
 
-        // Is service call ke successful return tak DB transaction commit hogi
+        // Service return hone se pehle MySQL transaction commit hogi
         InventoryReservation reservation =
                 reservationService.reserveForOrder(event);
 
-        InventoryReservedEvent resultEvent = new InventoryReservedEvent(
-                reservation.getOrderId(),
-                reservation.getProductId(),
-                reservation.getQuantity(),
-                reservation.getUserId()
-        );
+        CompletableFuture<?> publishFuture =
+                switch (reservation.getStatus()) {
+
+                    case RESERVED -> eventPublisher.publish(
+                            new InventoryReservedEvent(
+                                    reservation.getOrderId(),
+                                    reservation.getProductId(),
+                                    reservation.getQuantity(),
+                                    reservation.getUserId()
+                            )
+                    );
+
+                    case REJECTED -> eventPublisher.publish(
+                            new InventoryRejectedEvent(
+                                    reservation.getOrderId(),
+                                    reservation.getProductId(),
+                                    reservation.getQuantity(),
+                                    reservation.getUserId(),
+                                    reservation.getRejectionReason()
+                            )
+                    );
+
+                    case PENDING -> throw new IllegalStateException(
+                            "Cannot publish a pending reservation: "
+                                    + reservation.getOrderId()
+                    );
+                };
 
         try {
-            // Result publish fail hua toh listener successful return nahi karega
-            eventPublisher.publish(resultEvent)
-                    .get(publishTimeoutSeconds, TimeUnit.SECONDS);
-
+            publishFuture.get(
+                    publishTimeoutSeconds,
+                    TimeUnit.SECONDS
+            );
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw exception;
         }
 
         log.info(
-                "OrderPlaced processed: orderId={}",
-                event.getOrderId());
+                "OrderPlaced processed: orderId={}, status={}",
+                reservation.getOrderId(),
+                reservation.getStatus()
+        );
     }
 }

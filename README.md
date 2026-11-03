@@ -330,3 +330,63 @@ guarantee reservation success.
 Transaction-aware caching does not make MySQL and Redis atomic.
 Concurrent reads and cache failures can still cause stale data.
 Automatic fallback to MySQL when Redis is unavailable is not implemented.
+
+## Day 13 — Order Outcomes Through Kafka
+
+Orders start as PENDING. Inventory processing publishes an outcome
+that updates the order asynchronously.
+
+| Inventory outcome | Order status |
+|---|---|
+| Stock reserved | CONFIRMED |
+| Insufficient stock | CANCELLED |
+| Product not found | CANCELLED |
+| Inventory service unavailable | PENDING until processing resumes |
+
+### Implementation
+
+- Inventory outcomes are persisted as RESERVED or REJECTED.
+- Rejection reasons: INSUFFICIENT_STOCK and PRODUCT_NOT_FOUND.
+- Stock reservation and inventory outcome share one MySQL transaction.
+- Replayed events reuse the saved outcome without reserving stock again.
+- Order updates validate event details and acquire a database row lock.
+- Repeated matching outcomes leave the final order status unchanged.
+- Conflicting outcomes are rejected.
+
+### Kafka Setup
+
+The inventory-rejected topic requires 3 partitions and replication
+factor 1 for the local single-broker setup.
+
+Create it from the project root:
+
+    docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic inventory-rejected --partitions 3 --replication-factor 1
+
+### Existing Database Migration
+
+Before starting the updated inventory-service against a pre-Day-13
+database, apply:
+
+docs/sql/day13-inventory-reservation-outcomes.sql
+
+This is a one-time migration. Do not rerun it on an already migrated
+database or a fresh schema created from the updated entities.
+
+### Manual Verification
+
+- Successful reservation confirmed order 13.
+- Insufficient stock cancelled order 15.
+- Order 16 remained PENDING during inventory-service downtime and
+  became CONFIRMED after recovery.
+- Missing product cancelled order 17 with PRODUCT_NOT_FOUND.
+- Replaying order 16 did not reserve stock again.
+- Replaying rejected order 15 after restocking preserved its rejection
+  and left stock unchanged.
+
+### Current Limitations
+
+- MySQL commits and Kafka publishing are separate operations;
+  a transactional outbox is not implemented.
+- Duplicate event delivery remains possible.
+- Unlimited retries can block processing on permanently invalid events;
+  dead-letter topic handling is pending.
