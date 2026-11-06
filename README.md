@@ -390,3 +390,40 @@ database or a fresh schema created from the updated entities.
 - Duplicate event delivery remains possible.
 - Unlimited retries can block processing on permanently invalid events;
   dead-letter topic handling is pending.
+
+## Day 14 — Code Review and Reliability Findings
+
+### Reviewed
+
+- Order creation transaction and Kafka acknowledgement handling.
+- Durable inventory outcomes and duplicate-event handling.
+- Atomic conditional stock reservation.
+- Order outcome validation, row locking and status transitions.
+- Transaction-aware Redis cache eviction.
+- Kafka consumer groups, offsets and retry configuration.
+- Database UNIQUE index on inventory.product_id verified.
+
+### Fixes
+
+- Added HTTP 404 mapping for EntityNotFoundException when an order
+  is missing.
+
+### Remaining Reliability Work
+
+1. Transactional Outbox for order creation:
+   save the order and outgoing event record in one MySQL transaction.
+2. Retry classification and Dead Letter Topics:
+   preserve permanent failures without endlessly blocking processing.
+3. Recovery policy for permanently missing orders and unexpected
+   persisted PENDING reservations.
+4. Cache recovery for failed eviction and concurrent stale refills.
+
+### Guarantees and Limits
+
+- Matching duplicate outcomes do not change final order status.
+- Inventory replay reuses the saved reservation outcome.
+- Kafka delivery may contain duplicates.
+- Kafka acknowledgement does not imply MySQL commit.
+- MySQL and Redis updates are not one atomic transaction.
+- Concurrent consumer behaviour was reviewed; a dedicated concurrent
+  load test has not yet been performed.

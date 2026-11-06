@@ -3,7 +3,7 @@ package com.karan.inventory_service.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.boot.SpringBootVersion;
+
 
 @Entity
 @Table(name = "inventory")
@@ -28,7 +28,7 @@ public class Inventory {
             throw new IllegalArgumentException("Product ID must be positive");
         }
         if(quantity < 0) {
-            throw new IllegalArgumentException("Quantity must be positive");
+            throw new IllegalArgumentException("Quantity must be zero or greater");
         }
         this.productId = productId;
         this.quantity = quantity;
