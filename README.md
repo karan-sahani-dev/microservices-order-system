@@ -457,3 +457,127 @@ docker run --rm --name order-service-day15 `
 Verified: `GET /health` returned `200 OK`, `GET /api/orders/13` read an
 existing MySQL order, and the Kafka consumers received partition assignments.
 Stop the foreground container with Ctrl+C.
+
+## Day 16 — Run the Order System with Docker Compose
+
+The local stack runs the API Gateway, Order Service, Inventory Service, and Notification Service alongside MySQL, Kafka, and Redis. Use `http://localhost:8080` as the API entry point.
+
+### 1. Build the application images
+
+Prerequisites: Java 17 and Docker Desktop with Docker Compose. Run these commands from the repository root in PowerShell:
+
+```powershell
+.\order-service\mvnw.cmd -f order-service/pom.xml clean package -DskipTests
+.\order-service\mvnw.cmd -f inventory-service/pom.xml clean package -DskipTests
+.\order-service\mvnw.cmd -f api-gateway/pom.xml clean package -DskipTests
+.\order-service\mvnw.cmd -f notification-service/pom.xml clean package -DskipTests
+
+docker build -t order-service:day15 ./order-service
+docker build -t inventory-service:day16 ./inventory-service
+docker build -t api-gateway:day16 ./api-gateway
+docker build -t notification-service:day16 ./notification-service
+```
+
+The image tags match `docker-compose.yml`. Each Dockerfile copies the JAR built by Maven.
+
+### 2. Set the database passwords
+
+Set these variables in the same PowerShell session used to run Compose. On a fresh setup, choose new local passwords. When reusing an existing MySQL volume, enter the passwords already configured for those accounts.
+
+```powershell
+$env:DAY16_MYSQL_ROOT_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'Docker MySQL root password' -AsSecureString)).Password
+$env:INVENTORY_DB_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'inventory_user password' -AsSecureString)).Password
+$env:ORDER_DB_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'order_user password' -AsSecureString)).Password
+```
+
+Keep real passwords out of the README, Compose file, and Git.
+
+### 3. Start and initialize the infrastructure
+
+Stop any older local instances using the same ports. For example, stop the Day 15 Order Service container if it still owns port `8081`.
+
+```powershell
+docker compose -p microservices-day16 config --quiet
+docker compose -p microservices-day16 up -d mysql kafka redis
+docker compose -p microservices-day16 ps
+```
+
+Use `-p microservices-day16` throughout so the stack uses its own project network and named volumes.
+
+On the first run, MySQL initializes `inventory_db` and `inventory_user` from the Compose configuration. Once MySQL is healthy, create the Order Service database and account:
+
+```powershell
+docker compose -p microservices-day16 exec mysql mysql -u root -p
+```
+
+Enter the Docker MySQL root password. At the `mysql>` prompt, replace the placeholder with the same password entered for `ORDER_DB_PASSWORD`:
+
+```sql
+CREATE DATABASE IF NOT EXISTS order_db;
+CREATE USER 'order_user'@'%' IDENTIFIED BY 'YOUR_ORDER_DB_PASSWORD';
+GRANT ALL PRIVILEGES ON `order_db`.* TO 'order_user'@'%';
+EXIT;
+```
+
+The database and user setup is a one-time step for a fresh MySQL volume.
+
+Kafka topic auto-creation is disabled. Create the topics before starting the applications:
+
+```powershell
+foreach ($topic in @('order-placed', 'inventory-reserved', 'inventory-rejected')) {
+    docker compose -p microservices-day16 exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic $topic --partitions 3 --replication-factor 1
+    if ($LASTEXITCODE -ne 0) { break }
+}
+
+docker compose -p microservices-day16 exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --list
+```
+
+### 4. Start the application services
+
+```powershell
+docker compose -p microservices-day16 up -d
+docker compose -p microservices-day16 ps
+```
+
+The Gateway reaches the backend services by their Compose names. Kafka clients inside Docker connect to `kafka:19092`.
+
+### 5. Run the smoke test
+
+For a fresh database, wait for Inventory Service to start and create its tables. Then open the inventory database using `INVENTORY_DB_PASSWORD`:
+
+```powershell
+docker compose -p microservices-day16 exec mysql mysql -h mysql -u inventory_user -p -D inventory_db
+```
+
+Seed product `303` with 10 units if it does not already exist:
+
+```sql
+INSERT INTO inventory (product_id, quantity, reserved_quantity)
+SELECT 303, 10, 0
+WHERE NOT EXISTS (SELECT 1 FROM inventory WHERE product_id = 303);
+EXIT;
+```
+
+1. Send `GET http://localhost:8080/api/inventory/303` and note the available and reserved quantities.
+2. Send `POST http://localhost:8080/api/orders` with `Content-Type: application/json`:
+
+   ```json
+   {"userId": 1, "productId": 303, "quantity": 1}
+   ```
+
+   Expect `201 Created` with status `PENDING`. Save the returned order ID.
+3. Send `GET http://localhost:8080/api/orders/<id>`. After Kafka processing, expect `200 OK` and `CONFIRMED`. If the order is still `PENDING`, retry the GET.
+4. Read inventory again. With no other orders for that product, reserved stock should increase by one and available stock should decrease by one.
+5. Check Notification Service logs for `Order Received` and `Stock reserved` with the same order ID:
+
+   ```powershell
+   docker compose -p microservices-day16 logs --tail 60 notification-service
+   ```
+
+**Verified locally:** Order `3` was created through the Gateway as `PENDING`, later returned `CONFIRMED`, and appeared in both Notification Service log messages.
+
+To stop the stack while keeping its named volumes:
+
+```powershell
+docker compose -p microservices-day16 down
+```

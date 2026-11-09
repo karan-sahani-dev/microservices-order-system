@@ -1,4 +1,69 @@
 services:
+  notification-service:
+    image: notification-service:day16
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+    depends_on:
+      kafka:
+        condition: service_started
+  api-gateway:
+    image: api-gateway:day16
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+    depends_on:
+      - order-service
+      - inventory-service
+    ports:
+      - "127.0.0.1:8080:8080"
+  order-service:
+    image: order-service:day15
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/order_db
+      SPRING_DATASOURCE_USERNAME: order_user
+      DB_PASSWORD: "${ORDER_DB_PASSWORD:?Set ORDER_DB_PASSWORD}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8081:8081"
+  inventory-service:
+    image: inventory-service:day16
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/inventory_db
+      SPRING_DATASOURCE_USERNAME: inventory_user
+      INVENTORY_DB_PASSWORD: "${INVENTORY_DB_PASSWORD:?Set INVENTORY_DB_PASSWORD}"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      REDIS_HOST: redis
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8082:8082"
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DAY16_MYSQL_ROOT_PASSWORD:?Set DAY16_MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: inventory_db
+      MYSQL_USER: inventory_user
+      MYSQL_PASSWORD: "${INVENTORY_DB_PASSWORD:?Set INVENTORY_DB_PASSWORD}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
   kafka:
     image: apache/kafka:4.1.2
     ports:
@@ -40,3 +105,4 @@ services:
 
 volumes:
   kafka-data:
+  mysql-data:
