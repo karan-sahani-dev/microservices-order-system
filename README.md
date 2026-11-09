@@ -427,3 +427,33 @@ database or a fresh schema created from the updated entities.
 - MySQL and Redis updates are not one atomic transaction.
 - Concurrent consumer behaviour was reviewed; a dedicated concurrent
   load test has not yet been performed.
+
+## Day 15 — Order Service Docker Packaging
+
+The Dockerfile packages the prebuilt Spring Boot JAR with a Java 17 runtime.
+
+From the project root in PowerShell, with Docker Desktop and Windows MySQL
+running, stop the IntelliJ order-service instance to free port 8081.
+
+```powershell
+.\order-service\mvnw.cmd -f order-service/pom.xml package -DskipTests
+docker build -t order-service:day15 ./order-service
+docker compose up -d kafka
+
+$kafkaId = docker compose ps -q kafka
+$kafkaNetwork = (docker inspect $kafkaId | ConvertFrom-Json)[0].NetworkSettings.Networks.PSObject.Properties.Name | Select-Object -First 1
+
+$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'MySQL password' -AsSecureString)).Password
+
+docker run --rm --name order-service-day15 `
+  --network $kafkaNetwork `
+  -p 127.0.0.1:8081:8081 `
+  -e DB_PASSWORD `
+  -e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3306/order_db" `
+  -e "KAFKA_BOOTSTRAP_SERVERS=kafka:19092" `
+  order-service:day15
+```
+
+Verified: `GET /health` returned `200 OK`, `GET /api/orders/13` read an
+existing MySQL order, and the Kafka consumers received partition assignments.
+Stop the foreground container with Ctrl+C.
